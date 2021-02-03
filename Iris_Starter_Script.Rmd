@@ -1,0 +1,176 @@
+---
+title: "Pause_1"
+author: "Charlie Wilson"
+date: "Jan 2021"
+output: pdf_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+Setup and packages
+
+```{r echo = T, results = 'hide'}
+
+#Additional packages:
+library(ggplot2) 
+library(tidyr) 
+library(dplyr) 
+library(lubridate) 
+library(svDialogs)
+
+```
+
+Setup and count and order data
+```{r}
+
+monkey <- dlgInput("Enter monkey", Sys.info()["user"])$res
+
+# Where are the data?
+##For Charlie Macbook
+path <- file.path("/Users/charliewilson/Dropbox/Reversible Cognition/Data for Iris",monkey); #Where are the data? You need to change this for your data location
+save.path <- file.path("/Users/charliewilson/Dropbox/Reversible Cognition/Data for Iris"); #Path to save your data frame. Try not to put it in with the raw data
+
+#List and organise the data
+Session.list <- dir(path = path, pattern = "*.txt"); #List the files in the date
+Dates <- data.frame(Session.list); #Extract dates from filenames
+
+colnames(Dates) <- c("fid"); #rename File ID column
+Dates <- Dates %>% separate(fid, c("Monkey", "Date","_","Time","Ext"),sep=cumsum(c(2,6,1,4,4))); #Split the filename into separate sections
+Dates$Date <- dmy(Dates$Date); #Put Date column into date format
+Dates$fid <- Session.list; 
+Dates <- arrange(Dates, Date); #Put Dates into date order
+
+Nsession <- length(Dates$Date); # How many sessions?
+
+
+```
+
+Load up all data required
+
+```{r}
+
+Data <- data.frame(); #Initialise big data frame
+
+if(Nsession >0){ #Sanity check
+  
+    for(isession in 1:Nsession){ #Loop on each session  
+      
+      fid <- Dates$fid[isession]; #Extract filename from Dates
+      print(fid) #Show filename
+      event.raw <- read.csv(file=paste(path,"/",fid, sep= ""),sep= "", dec =",",  header = FALSE, fill=TRUE, colClasses=c(NA, NA, "NULL")); #Load data from .txt file using space as separator
+      colnames(event.raw) <- c("time","event"); #Name columns
+      event.raw$session <- isession; #Record session number
+      
+      # Now some basic analysis
+      event.raw$trial <- cumsum(event.raw$event == 100); #Trial number
+      
+      # Which stimulus was used in the trial
+      event.raw <- event.raw %>%
+        group_by(trial) %>%   #Apply this trial by trial (rather than line by line)
+        mutate(Stim = nth(event,4)) %>%  #In every trial take teh nth entry in the Event column
+        ungroup();  #Put it back with the new column
+      
+      # Which TS
+      event.raw <- event.raw %>%
+        group_by(trial) %>%
+        mutate(TS = nth(event,2)) %>%
+        ungroup();
+      
+      # This is the end of intiial analysis of a single day
+      
+      #Put this session (event.raw) into Data which will contain all of the sessions
+      Data <- rbind(Data,event.raw);
+      
+     rm(event.raw)
+        
+    }
+  }
+
+#Save
+save(file = paste(save.path,"/Data_Iris_",monkey,".Rdata",sep = ""),Data, Dates) # Save monkey specific data frame
+
+``` 
+
+ If you don't need to run all of the above because you have already done it, you can load the data like this:
+ 
+```{r}
+
+monkey <- dlgInput("Enter monkey", Sys.info()["user"])$res
+
+# Where are the data?
+save.path <- file.path("/Users/charliewilson/Dropbox/Reversible Cognition/Data for Iris"); #Path where we saved the data above
+
+ load(file = paste(save.path,"/Data_Iris_",monkey,".Rdata",sep = ""))
+ 
+
+```
+
+Let's plot something simple
+ 
+ 
+```{r}
+
+# First we summarise the data in a number of sessions
+# Let's count the codes 65 and 100 (reward and trials)
+# To help you learn we do this in 2 different data frames and then combine them
+# It is also possible to do this in one go...
+
+Sess.data <- Data %>%
+        group_by(session) %>%   #Apply this session by session
+        filter(event==65) %>%   #Only look at 65  
+        count(event)  #Count teh instances
+
+Sess.data2 <- Data %>%
+        group_by(session) %>%   #Apply this session by session
+        filter(event==100) %>%   #Only look at 100  
+        count(event)  #Count the instances
+
+Sess.dat <- left_join(Sess.data, Sess.data2, by="session") # Combine teh two DFs and make sure it is done on the basis of "session"
+colnames(Sess.dat) <- c("session","xx","Rew","yy","Trials"); #Rename columns
+Sess.dat <- subset(Sess.dat, select= -c(xx,yy)); #remove superfluous columns
+remove(Sess.data, Sess.data2); #remove superfluous DFs
+#Again you could do that in 1 step, but this shows you how to do it in step by step
+
+ggplot(Sess.dat, aes(x=session)) + #What data to plot
+    geom_point(aes(y=Rew),color='red') + #Add a specific plot and colour it
+  geom_point(aes(y=Trials),color='blue') #Add a specific plot and colour it
+
+#Now add a calculation to the DF
+
+Sess.dat$Rate <- Sess.dat$Trials/Sess.dat$Rew #How many trials per reward
+
+# Now plot that
+
+ggplot(Sess.dat, aes(x=session, y=Rate)) + #What data to plot
+    geom_point(color='red') + #Add a specific plot and colour it
+    geom_smooth() #Add a smoothed line
+
+```
+
+ Ok, where are the pauses
+ 
+ 
+Let's plot something simple
+ 
+ 
+```{r}
+
+Time <- subset(Data, event==75)
+Time <- Time %>%  
+  mutate(diff_row = time - lag(time))
+Time$diff_row <- replace(Time$diff_row, which(Time$diff_row < 0), NA)
+
+ggplot(Time, aes(x=diff_row)) + geom_histogram(binwidth=500) + xlim(0, 20000)
+ggplot(Time, aes(x=diff_row)) + geom_histogram(binwidth=10000) + xlim(20000,max(Time$diff_row)) 
+ggplot(Time, aes(x=diff_row)) + geom_histogram(binwidth=10000) + xlim(20000,300000) 
+ggplot(Time, aes(x=diff_row)) + geom_histogram(binwidth=5000) + scale_y_log10()
+
+
+Pauses <- subset(Time, diff_row>120000)
+ggplot(Pauses, aes(x=time)) + geom_density()
+ggplot(Pauses, aes(x=time)) + geom_histogram(binwidth=100000)
+ggplot(Pauses, aes(x=trial)) + geom_density()
+ggplot(Pauses, aes(x=trial)) + geom_histogram(binwidth=10)
+```
+ 
+ 
