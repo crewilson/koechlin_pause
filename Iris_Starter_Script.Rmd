@@ -13,6 +13,7 @@ Setup and packages
 
 #Additional packages:
 library(ggplot2) 
+library(ggpubr)
 library(tidyr) 
 library(dplyr) 
 library(lubridate) 
@@ -27,8 +28,8 @@ monkey <- dlgInput("Enter monkey", Sys.info()["user"])$res
 
 # Where are the data?
 ##For Charlie Macbook
-path <- file.path("/Users/charliewilson/Dropbox/Reversible Cognition/Data for Iris",monkey); #Where are the data? You need to change this for your data location
-save.path <- file.path("/Users/charliewilson/Dropbox/Reversible Cognition/Data for Iris"); #Path to save your data frame. Try not to put it in with the raw data
+path <- file.path("/Users/charliewilson/Dropbox/Reversible Cognition/Data for Iris/koechlin_pause",monkey); #Where are the data? You need to change this for your data location
+save.path <- file.path("/Users/charliewilson/Dropbox/Reversible Cognition/Data for Iris/koechlin_pause"); #Path to save your data frame. Try not to put it in with the raw data
 
 #List and organise the data
 Session.list <- dir(path = path, pattern = "*.txt"); #List the files in the date
@@ -172,5 +173,187 @@ ggplot(Pauses, aes(x=time)) + geom_histogram(binwidth=100000)
 ggplot(Pauses, aes(x=trial)) + geom_density()
 ggplot(Pauses, aes(x=trial)) + geom_histogram(binwidth=10)
 ```
+ 
+ Iris Pause Extcraction
+```{r}
+
+
+#filtrer les donn?es pour ne conserver qu'un seul ?v?nement
+DataEvent <- dplyr::filter(Data,event == 75)
+
+#cr?ation d'une nouvelle colone en d?calant => utiliser fct "lag", default pour le d?calage
+DataEvent<-dplyr::mutate(DataEvent, time2 = lag(time, default=0))
+#supprimer les colones inutiles (=garder les colones utiles)
+DataEvent<-dplyr::select(DataEvent, session, trial, event, time, time2)
+#temps entre chaque ?v?nement
+DataEvent<-dplyr::mutate(DataEvent, ecart=time-time2)
+#enl?ve les ?carts qui ne correspondent pas ? des pauses (d'une session ? l'autre)
+DataEvent<-dplyr::filter(DataEvent, ecart>0)
+
+#graphiques pour d?terminer ce qu'on consid?re comme une pause (? revoir en fct des r?sutats)
+ggplot(DataEvent, aes(x=ecart)) + geom_histogram(binwidth = 1000)
+# pour plus tard x, y, alpha, color, fill, linetype, size, weight
+# xlim + scale_y_log10()
+
+#s?parer le graphique en 2 parties pour voir o? d?marrent les pauses
+ggplot(DataEvent, aes(x=ecart)) + geom_histogram(binwidth = 500) + xlim(0,40000)
+ggplot(DataEvent, aes(x=ecart)) + geom_histogram(binwidth = 1000) + xlim(40000,1000000)
+
+ggplot(DataEvent, aes(x=ecart)) + geom_density() + xlim(0,40000)
+ggplot(DataEvent, aes(x=ecart)) + geom_density() + xlim(40000,1000000)
+
+#ok maintenant on a d?termin? la pause => quand dans la session
+DataPause<-dplyr::filter(DataEvent,ecart>120000)
+save(file = paste(save.path,"/Data_Iris_Pauses_",monkey,".Rdata",sep = ""),DataPause)
+#graphique pause
+ggplot(DataPause, aes(x=time)) + geom_histogram()
+ggplot(DataPause, aes(x=time)) + geom_density()
+
+
+#on veut voir la relation entre un ?v?nement (les pauses) et un autre
+DataEvent2 <- dplyr::filter(Data,event == 101)
+
+ 
+```
+ 
+ 
+ 
+ 
+Some simple analysis around the pauses
+
+ 
+```{r}
+
+#------comparer le nombre de switch (78) par rapport au nombre de pauses------
+
+Nb.Sess1 <-Data %>% group_by(session) %>% filter(event==78) %>% count(event)
+Nb.Sess2 <- DataPause %>%group_by(session) %>% filter(event==75) %>% count(event)
+Nb.Switch <- left_join(Nb.Sess1, Nb.Sess2, by="session")
+colnames(Nb.Switch) <- c("session","code Switch","Switch","code Pauses","Pauses");
+  # pas besoin : Nb.sess <- subset(Nb.sess, select= -c(xx,yy));
+remove(Nb.Sess1, Nb.Sess2)
+
+ggplot(Nb.Switch, aes(x=session)) + 
+  geom_point(aes(y=Switch),color='blue') + geom_point(aes(y=Pauses),color='black')
+
+Nb.Switch$rapport <- Nb.Switch$Pauses/Nb.Switch$Switch
+
+ggplot(Nb.Switch, aes(x=session, y=rapport)) +
+  geom_point(color='blue') + geom_smooth(color='blue')
+
+ggplot(Nb.Switch, aes(x=Pauses, y=Switch)) + 
+  geom_point(color='blue')
+
+#-------comparer le nombre de r?compenses (65) par rapport au nombre de pauses---------
+
+Nb.Sess1 <-Data %>% group_by(session) %>% filter(event==65) %>% count(event)
+Nb.Sess2 <- DataPause %>%group_by(session) %>% filter(event==75) %>% count(event)
+Nb.Reward <- left_join(Nb.Sess1, Nb.Sess2, by="session")
+colnames(Nb.Reward) <- c("session","code Reward","Reward","code Pauses","Pauses");
+# pas besoin : Nb.sess <- subset(Nb.sess, select= -c(xx,yy));
+remove(Nb.Sess1, Nb.Sess2)
+
+ggplot(Nb.Reward, aes(x=session)) + 
+  geom_point(aes(y=Reward),color='orange') + geom_point(aes(y=Pauses),color='black')
+
+Nb.Reward$rapport <- Nb.Reward$Pauses/Nb.Reward$Reward
+
+ggplot(Nb.Reward, aes(x=session, y=rapport)) +
+  geom_point(color='orange') + geom_smooth(color='orange')
+
+ggscatter(Nb.Reward, x = "Pauses", y = "Reward",
+          add = "reg.line",                                 # Add regression line
+          conf.int = TRUE,                                  # Add confidence interval
+          add.params = list(color = "orange",
+                            fill = "lightgray")
+          )+
+  stat_cor(method = "pearson", label.x = 3, label.y = 30)  # Add correlation coefficient
+
+#-------comparer le nombre de t?che complet?e (103) par rapport au nombre de pauses---------
+
+Nb.Sess1 <-Data %>% group_by(session) %>% filter(event==103) %>% count(event)
+Nb.Sess2 <- DataPause %>%group_by(session) %>% filter(event==75) %>% count(event)
+Nb.Complet <- left_join(Nb.Sess1, Nb.Sess2, by="session")
+colnames(Nb.Complet) <- c("session","code Complet","Complet","code Pauses","Pauses");
+# pas besoin : Nb.sess <- subset(Nb.sess, select= -c(xx,yy)); #remove superfluous columns
+remove(Nb.Sess1, Nb.Sess2)
+
+ggplot(Nb.Complet, aes(x=session)) + 
+  geom_point(aes(y=Complet),color='pink') + geom_point(aes(y=Pauses),color='black')
+
+Nb.Complet$rapport <- Nb.Complet$Pauses/Nb.Complet$Complet
+
+ggplot(Nb.Complet, aes(x=session, y=rapport)) +
+  geom_point(color='pink') + geom_smooth(color='pink')
+
+
+ggscatter(Nb.Complet, x = "Pauses", y = "Complet",
+          add = "reg.line",                                 # Add regression line
+          conf.int = TRUE,                                  # Add confidence interval
+          add.params = list(color = "pink",
+                            fill = "lightgray")
+          )+
+  stat_cor(method = "pearson", label.x = 3, label.y = 30)  # Add correlation coefficient
+
+
+#-------comparer le nombre d'incorrect (69) par rapport au nombre de pauses---------
+
+Nb.Sess1 <-Data %>% group_by(session) %>% filter(event==69) %>% count(event)
+Nb.Sess2 <- DataPause %>%group_by(session) %>% filter(event==75) %>% count(event)
+Nb.Neg <- left_join(Nb.Sess1, Nb.Sess2, by="session")
+colnames(Nb.Neg) <- c("session","code Erreur","Erreur","code Pauses","Pauses");
+# pas besoin : Nb.sess <- subset(Nb.sess, select= -c(xx,yy)); #remove superfluous columns
+remove(Nb.Sess1, Nb.Sess2)
+
+ggplot(Nb.Neg, aes(x=session)) + 
+  geom_point(aes(y=Erreur),color='red') + geom_point(aes(y=Pauses),color='black')
+
+Nb.Neg$rapport <- Nb.Neg$Pauses/Nb.Neg$Erreur
+
+ggplot(Nb.Neg, aes(x=session, y=rapport)) +
+  geom_point(color='red') + geom_smooth(color='red')
+
+ggplot(Nb.Neg, aes(x=Pauses, y=Erreur)) + 
+  geom_point(color='red') +
+ 
+ggscatter(Nb.Neg, x = "Pauses", y = "Erreur",
+          add = "reg.line",                                 # Add regression line
+          conf.int = TRUE,                                  # Add confidence interval
+          add.params = list(color = "red",
+                            fill = "lightgray")
+          )+
+  stat_cor(method = "pearson", label.x = 3, label.y = 30)  # Add correlation coefficient
+
+
+#-------comparer le nombre de fb positifs (68) par rapport au nombre de pauses---------
+
+Nb.Sess1 <-Data %>% group_by(session) %>% filter(event==68) %>% count(event)
+Nb.Sess2 <- DataPause %>%group_by(session) %>% filter(event==75) %>% count(event)
+Nb.Pos <- left_join(Nb.Sess1, Nb.Sess2, by="session")
+colnames(Nb.Pos) <- c("session","code FB positif","FB.positif","code Pauses","Pauses");
+# pas besoin : Nb.sess <- subset(Nb.sess, select= -c(xx,yy)); #remove superfluous columns
+remove(Nb.Sess1, Nb.Sess2)
+
+ggplot(Nb.Pos, aes(x=session)) + 
+  geom_point(aes(y=FB.positif),color='red') + geom_point(aes(y=Pauses),color='black')
+
+Nb.Pos$rapport <- Nb.Pos$Pauses/Nb.Pos$FB.positif
+
+ggplot(Nb.Pos, aes(x=session, y=rapport)) +
+  geom_point(color='green') + geom_smooth(color='green')
+ 
+
+ggscatter(Nb.Pos, x = "Pauses", y = "FB.positif",
+          add = "reg.line",                                 # Add regression line
+          conf.int = TRUE,                                  # Add confidence interval
+          add.params = list(color = "green",
+                            fill = "lightgray")
+          )+
+  stat_cor(method = "pearson", label.x = 3, label.y = 30)  # Add correlation coefficient
+
+```
+ 
+ 
+ 
  
  

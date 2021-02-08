@@ -17,7 +17,7 @@ DataEvent <- dplyr::filter(Data,event == 75)
 #création d'une nouvelle colone en décalant => utiliser fct "lag", default pour le décalage
 DataEvent<-dplyr::mutate(DataEvent, time2 = lag(time, default=0))
 #supprimer les colones inutiles (=garder les colones utiles)
-DataEvent<-dplyr::select(DataEvent, session, trial, time, time2)
+DataEvent<-dplyr::select(DataEvent, session, trial, event, time, time2)
 #temps entre chaque évènement
 DataEvent<-dplyr::mutate(DataEvent, ecart=time-time2)
 #enlève les écarts qui ne correspondent pas à des pauses (d'une session à l'autre)
@@ -37,6 +37,7 @@ ggplot(DataEvent, aes(x=ecart)) + geom_density() + xlim(40000,1000000)
 
 #ok maintenant on a déterminé la pause => quand dans la session
 DataPause<-dplyr::filter(DataEvent,ecart>120000)
+save(file = paste(save.path,"/Data_Iris_Pauses_",monkey,".Rdata",sep = ""),DataPause)
 #graphique pause
 ggplot(DataPause, aes(x=time)) + geom_histogram()
 ggplot(DataPause, aes(x=time)) + geom_density()
