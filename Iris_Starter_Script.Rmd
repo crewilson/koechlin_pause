@@ -99,10 +99,11 @@ save(file = paste(save.path,"/Data_Iris_",monkey,".Rdata",sep = ""),Data, Dates)
 monkey <- dlgInput("Enter monkey", Sys.info()["user"])$res
 
 # Where are the data?
-save.path <- file.path("/Users/charliewilson/Dropbox/Reversible Cognition/Data for Iris"); #Path where we saved the data above
+save.path <- file.path("/Users/charliewilson/Dropbox/Reversible Cognition/Data for Iris/koechlkin_pause"); #Path where we saved the data above
 
- load(file = paste(save.path,"/Data_Iris_",monkey,".Rdata",sep = ""))
- 
+# load(file = paste(save.path,"/Data_Iris_",monkey,".Rdata",sep = ""))
+
+load(file = paste("Data_Iris_",monkey,".Rdata",sep = "")) 
 
 ```
 
@@ -204,7 +205,8 @@ ggplot(DataEvent, aes(x=ecart)) + geom_density() + xlim(40000,1000000)
 
 #ok maintenant on a d?termin? la pause => quand dans la session
 DataPause<-dplyr::filter(DataEvent,ecart>120000)
-save(file = paste(save.path,"/Data_Iris_Pauses_",monkey,".Rdata",sep = ""),DataPause)
+#save(file = paste(save.path,"/Data_Iris_Pauses_",monkey,".Rdata",sep = ""),DataPause)
+save(file = paste("Data_Iris_Pauses_",monkey,".Rdata",sep = ""),DataPause)
 #graphique pause
 ggplot(DataPause, aes(x=time)) + geom_histogram()
 ggplot(DataPause, aes(x=time)) + geom_density()
@@ -216,8 +218,7 @@ DataEvent2 <- dplyr::filter(Data,event == 101)
  
 ```
  
- 
- 
+
  
 Some simple analysis around the pauses
 
@@ -313,8 +314,6 @@ Nb.Neg$rapport <- Nb.Neg$Pauses/Nb.Neg$Erreur
 ggplot(Nb.Neg, aes(x=session, y=rapport)) +
   geom_point(color='red') + geom_smooth(color='red')
 
-ggplot(Nb.Neg, aes(x=Pauses, y=Erreur)) + 
-  geom_point(color='red') +
  
 ggscatter(Nb.Neg, x = "Pauses", y = "Erreur",
           add = "reg.line",                                 # Add regression line
@@ -353,7 +352,77 @@ ggscatter(Nb.Pos, x = "Pauses", y = "FB.positif",
 
 ```
  
+ What happened just before the pauses?
+ 
+```{r} 
+ 
+
+NPause<-length(DataPause$session)
+Nbuffer <- 20
+counts <- data.frame(matrix(ncol = 5, nrow = NPause)) #Dataframe to collect teh new data
+colnames(counts) <- c("inc","cor","rew","sw","comp"); #rename File ID column
+
+for(iDataPause in 1:NPause){   #Boucle sur chaque pause
+  
+  # Extraction de coordonnées de la pause pour le trouver dans Data
+  x <- DataPause$session[iDataPause]; 
+  y <- DataPause$trial[iDataPause];
+  
+  #Extraction des Nbuffer dernier essaies avant la pause
+  test<- Data %>%
+    filter( session==x, between(trial,y-Nbuffer,y))
+  
+  # Compte les differents codes dasn test et appliquer à DataPause
+ counts$inc[iDataPause] <- test %>%
+        tally(event==69)  #Count the number of that code  
+ counts$cor[iDataPause] <- test %>%
+        tally(event==68)  #Count the number of that code  
+ counts$rew[iDataPause] <- test %>%
+        tally(event==65)  #Count the number of that code  
+ counts$sw[iDataPause] <- test %>%
+        tally(event==78)  #Count the number of that code  
+ counts$comp[iDataPause] <- test %>%
+        tally(event==103)  #Count the number of that code  
+  
+ rm(test) #Clean up
+ # print(iDataPause) # Option pour checker le boucle
+}
+ 
+# rentre counts dans DataPause
+ DataPause <- cbind(DataPause, counts)
+ 
+ # Le output du "count" est un "discrete". Il faut le rendre numerique pour plotter
+ DataPause$inc <- as.numeric(as.character(DataPause$inc))
+  DataPause$cor <- as.numeric(as.character(DataPause$cor))
+   DataPause$rew <- as.numeric(as.character(DataPause$rew))
+    DataPause$sw <- as.numeric(as.character(DataPause$sw))
+     DataPause$comp <- as.numeric(as.character(DataPause$comp))
+
+ # Exemple figure compare ecart et time
+ 
+ ggscatter(DataPause, x = "inc", y = "ecart",
+          add = "reg.line",                                 # Add regression line
+          conf.int = TRUE,                                  # Add confidence interval
+          add.params = list(color = "red",
+                            fill = "lightgray")
+          )+
+  stat_cor(method = "pearson", label.x = 3, label.y = 30)  # Add correlation coefficient
+  
+# Exemple figure compare inc et time
+ 
+ ggscatter(DataPause, x = "inc", y = "time",
+          add = "reg.line",                                 # Add regression line
+          conf.int = TRUE,                                  # Add confidence interval
+          add.params = list(color = "green",
+                            fill = "lightgray")
+          )+
+  stat_cor(method = "pearson", label.x = 3, label.y = 30)  # Add correlation coefficient
  
  
+```
+
+
+
+
  
  
