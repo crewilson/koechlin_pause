@@ -107,8 +107,17 @@ load(file = paste("Data_Iris_",monkey,".Rdata",sep = ""))
 
 ```
 
-Let's plot something simple
+What is in each session?
  
+  
+```{r}
+ Sess.content <- Data %>%
+        group_by(session) %>%   #Apply this session by session
+        summarize(max.sn = max(trial))   
+        
+```
+
+Let's plot something simple
  
 ```{r}
 
